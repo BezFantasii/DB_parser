@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+products.json
+products.json.tmp
+.ozon-profile/
+tmp/pdfs/
+# Убрать тз из отслеживаемых файлов после утверждения и поместить в .gitignore

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ozon-parser"
+version = "0.1.0"
+description = "Collect Ozon product names and displayed prices into JSON"
+requires-python = ">=3.9"
+dependencies = ["playwright>=1.40,<2"]
+
+[project.scripts]
+ozon-parser = "ozon_parser:main"
+
+[tool.setuptools]
+py-modules = ["ozon_parser"]
