@@ -12,6 +12,7 @@ python -m playwright install chromium
 python ozon_parser.py "https://www.ozon.ru/search/?text=наушники" --pages 2 --limit 100 --output products.json --headed --manual
 ```
 
+
 Браузер откроется. При необходимости выберите регион или пройдите проверку доступа вручную, затем нажмите Enter в терминале. `--manual` запрашивает подтверждение для каждой страницы. Для автоматического запуска уберите `--manual`; без `--headed` окно скрыто. Проверки доступа автоматически не обходятся.
 
 ## Если Ozon возвращает 403
