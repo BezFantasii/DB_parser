@@ -1,24 +1,34 @@
-"""Browser fixture checks for listing selectors; no network requests."""
-import sys
+"""Browser smoke test with routed fixtures: no requests to marketplace servers."""
 from pathlib import Path
+import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ozon_parser import EXTRACT_CARDS, WAIT_FOR_CARDS
+from parsers import ParserOzon, ParserWildberries
 from playwright.sync_api import sync_playwright
 
-with sync_playwright() as p:
-    browser = p.chromium.launch()
-    try:
-        page = browser.new_page()
-        for widget in ("searchResultsV2", "searchResults", "catalogResults", "tileGrid"):
-            page.set_content(f'''<div data-widget="{widget}"><div>
-                <a href="https://www.ozon.ru/product/test-123/">Наушники</a>
-                <span>1 299 ₽</span></div></div>''')
-            assert page.evaluate(WAIT_FOR_CARDS), widget
-            cards = page.evaluate(EXTRACT_CARDS)
-            assert len(cards) == 1 and cards[0]["price_raw"] == "1 299 ₽", (widget, cards)
-        page.set_content('<a href="https://www.ozon.ru/product/test-123/">Рекомендация</a>')
-        assert not page.evaluate(WAIT_FOR_CARDS)
-        assert page.evaluate(EXTRACT_CARDS) == []
-        print("PASS: four listing widgets and unrelated product link")
-    finally:
-        browser.close()
+
+def main():
+    fixtures = Path(__file__).with_name("fixtures")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            result = []
+            for factory, url, filename in (
+                (ParserOzon, "https://www.ozon.ru/product/test-123/", "ozon_product.html"),
+                (ParserWildberries, "https://www.wildberries.ru/catalog/456/detail.aspx", "wb_product.html"),
+            ):
+                html = (fixtures / filename).read_text(encoding="utf-8")
+                page.route("**/*", lambda route, request, html=html: route.fulfill(status=200, body=html, content_type="text/html"))
+                parser = factory(url, headed=False, delay=0)
+                result.append(parser._parse_card(page, url))
+                page.unroute("**/*")
+            assert result[0].keys() == result[1].keys()
+            assert result[0]["price"] == result[1]["price"]
+            assert result[0]["observed_at"]
+            print("PASS: browser DOM -> shared WB product format, two marketplaces, no network")
+        finally:
+            browser.close()
+
+
+if __name__ == "__main__":
+    main()

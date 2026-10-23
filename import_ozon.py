@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import db
+from contracts import normalize_item, loads
 
 MARKETPLACE_CODE = "ozon"
 
@@ -34,19 +35,11 @@ def to_item(raw):
     name = " ".join(raw["name"].split())
     if BADGE_RE.match(name) or len(name) < 6:
         raise ValueError("вместо названия рекламная плашка: %r" % name)
-    return {
-        "external_id": external_id_from_url(raw["url"]),
-        "name": name,
-        "url": raw["url"],
-        "brand": None,
-        "price": Decimal(str(raw["price"])),  # через str, чтобы не тащить ошибки float
-        "rating": None,
-        "reviews_count": None,
-    }
+    return normalize_item(dict(raw, name=name), MARKETPLACE_CODE)
 
 
 def load_items(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return loads(Path(path).read_text(encoding="utf-8"))
 
 
 def save_items(conn, marketplace_id, run_id, items):

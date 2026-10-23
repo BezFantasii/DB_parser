@@ -1,9 +1,9 @@
 """Работа с PostgreSQL: подключение, запуски сбора, запись товаров и цен."""
 import os
 
-import psycopg2
-
-from features import extract_features
+from datetime import datetime, timezone
+import models_simple as sql
+from contracts import normalize_item, validate_batch
 
 
 def get_connection():
@@ -13,7 +13,8 @@ def get_connection():
         raise RuntimeError(
             "Не задана переменная окружения DATABASE_URL. Пример: "
             "postgresql://postgres:ПАРОЛЬ@localhost:5432/marketplace_db")
-    return psycopg2.connect(url)
+    import psycopg2
+    return psycopg2.connect(url, connect_timeout=5)
 
 
 def get_marketplace_id(conn, code):
@@ -48,47 +49,42 @@ def finish_run(conn, run_id, status, error_message=None):
     conn.commit()
 
 
-def save_item(conn, marketplace_id, run_id, item):
-    """Записывает товар и его цену одной транзакцией (один commit в конце).
-
-    Если что-то упало, снаружи нужно вызвать conn.rollback().
-    Признаки наушников (connection_type, form_factor, anc, microphone, battery_hours)
-    извлекаются из названия (features.py). Неизвестное = None = NULL.
-    При повторном сборе COALESCE не даёт NULL затереть уже известное значение:
-    брендом и признаками, найденными раньше, нельзя пожертвовать ради пустого нового.
-    """
-    # WB передаёт готовые признаки (название + характеристики); Ozon - только название
-    f = item.get("features") or extract_features(item["name"])
+def save_item(conn, marketplace_id, run_id, item, *, commit=True):
+    """Plain parameterized SQL. Batch owner can defer the commit."""
     with conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO products
-                   (marketplace_id, external_id, name, url, brand,
-                    connection_type, form_factor, anc, microphone, battery_hours)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (marketplace_id, external_id) DO UPDATE SET
-                   name = EXCLUDED.name,
-                   url = COALESCE(EXCLUDED.url, products.url),
-                   brand = COALESCE(EXCLUDED.brand, products.brand),
-                   connection_type = COALESCE(EXCLUDED.connection_type, products.connection_type),
-                   form_factor = COALESCE(EXCLUDED.form_factor, products.form_factor),
-                   anc = COALESCE(EXCLUDED.anc, products.anc),
-                   microphone = COALESCE(EXCLUDED.microphone, products.microphone),
-                   battery_hours = COALESCE(EXCLUDED.battery_hours, products.battery_hours),
-                   last_seen_at = now()
-               RETURNING id""",
-            (marketplace_id, item["external_id"], item["name"], item["url"], item["brand"],
-             f["connection_type"], f["form_factor"], f["anc"], f["microphone"], f["battery_hours"]),
-        )
-        product_id = cur.fetchone()[0]
-
-        # price_history - журнал: каждый запуск добавляет новую строку
-        cur.execute(
-            """INSERT INTO price_history
-                   (product_id, run_id, observed_at, price, currency, region,
-                    price_kind, availability, rating, reviews_count)
-               VALUES (%s, %s, now(), %s, 'RUB', 'unknown', 'unknown', 'unknown', %s, %s)
-               ON CONFLICT DO NOTHING""",
-            (product_id, run_id, item["price"], item["rating"], item["reviews_count"]),
-        )
-    conn.commit()
+        cur.execute("SELECT code FROM marketplaces WHERE id = %s", (marketplace_id,))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("Неизвестная площадка")
+        item = normalize_item(item, row[0])
+        cur.execute("SELECT marketplace_id FROM parse_runs WHERE id = %s", (run_id,))
+        if cur.fetchone() != (marketplace_id,):
+            raise ValueError("Запуск относится к другой площадке")
+        product = {k: item.get(k) for k in ("external_id", "name", "url", "brand", "model")}
+        product.update(item["features"], marketplace_id=marketplace_id)
+        product_id = sql.upsert_product(cur, product)
+        observation = {k: item[k] for k in ("price", "rating", "reviews_count")}
+        observation.update(product_id=product_id, run_id=run_id,
+                           observed_at=item.get("observed_at", datetime.now(timezone.utc)))
+        for key in ("currency", "region", "price_kind", "availability"):
+            if key in item:
+                observation[key] = item[key]
+        sql.add_price(cur, observation)
+    if commit:
+        conn.commit()
     return product_id
+
+
+def save_batch(conn, payload):
+    """All validated items are committed together; failed runs remain auditable."""
+    code, source, items = validate_batch(payload)
+    marketplace_id = get_marketplace_id(conn, code)
+    run_id = start_run(conn, marketplace_id, source)
+    try:
+        ids = [save_item(conn, marketplace_id, run_id, item, commit=False) for item in items]
+        finish_run(conn, run_id, "succeeded")
+    except Exception:
+        conn.rollback()
+        finish_run(conn, run_id, "failed", "Пакет отклонён при записи; данные пакета отменены")
+        raise
+    return {"run_id": run_id, "saved": len(ids), "product_ids": ids}

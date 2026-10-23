@@ -8,4 +8,6 @@ products.json
 products.json.tmp
 .ozon-profile/
 tmp/pdfs/
+tmp/db-tests/
+.wb-profile/
 # Убрать тз из отслеживаемых файлов после утверждения и поместить в .gitignore

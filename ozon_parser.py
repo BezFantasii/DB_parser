@@ -1,4 +1,4 @@
-"""Collect visible Ozon search/category cards. Python 3.9+."""
+"""Ozon CLI compatibility and shared ParserOzon product collection."""
 import argparse
 import json
 import re
@@ -8,60 +8,8 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
-# Avoid generated CSS class names. These selectors may still need updating
-# when Ozon changes its markup. Only listing cards are supported.
-LISTING_ROOTS_JS = r"""() => {
-    const roots = Array.from(document.querySelectorAll(
-        '[data-widget="searchResultsV2"], [data-widget="searchResults"], [data-widget="catalogResults"], [data-widget="tileGrid"]'));
-    if (roots.length) return roots;
-    if (/^\/(search|category)\//.test(location.pathname)) {
-        const main = document.querySelector('main, #layoutPage');
-        if (main) return [main];
-    }
-    return [];
-}"""
-WAIT_FOR_CARDS = "() => (" + LISTING_ROOTS_JS + ")().some(root => root.querySelector('a[href*=\"/product/\"]'))"
-EXTRACT_CARDS = r"""() => {
-    const result = [];
-    const roots = (__LISTING_ROOTS__)();
-    for (const root of roots) {
-        for (const link of root.querySelectorAll('a[href*="/product/"]')) {
-            const titleNode = link.querySelector('[data-widget="webProductHeading"], [data-widget="webProductTitle"], span.tsBody500Medium');
-            const name = (titleNode?.innerText || link.innerText || link.getAttribute('aria-label') || link.querySelector('img')?.alt || '').trim();
-            if (!name || /₽/.test(name)) continue;
-            let card = link;
-            let priceBlock = null;
-            // Stop at the smallest ancestor containing this product and a price.
-            for (let depth = 0; depth < 7 && card && card !== root; depth++, card = card.parentElement) {
-                const ids = new Set(Array.from(card.querySelectorAll('a[href*="/product/"]'))
-                    .map(a => a.pathname.match(/-(\d+)\/?$/)?.[1] || a.pathname));
-                if (ids.size > 1) break;
-                priceBlock = card.querySelector('[data-widget="webPrice"]');
-                if (!priceBlock) {
-                    priceBlock = Array.from(card.querySelectorAll('span')).find(el => {
-                        const style = getComputedStyle(el);
-                        return /^\s*\d[\d\s\u00a0\u202f]*(?:[,.]\d{1,2})?\s*₽\s*$/.test(el.innerText)
-                            && !el.closest('del, s') && !style.textDecorationLine.includes('line-through');
-                    });
-                }
-                if (priceBlock) break;
-            }
-            if (!priceBlock) continue;
-            const priceText = priceBlock.innerText.trim();
-            const candidates = Array.from(priceBlock.querySelectorAll('span'));
-            if (priceBlock.matches('span')) candidates.unshift(priceBlock);
-            const current = candidates.find(el => {
-                const style = getComputedStyle(el);
-                return /^\s*\d[\d\s\u00a0\u202f]*(?:[,.]\d{1,2})?\s*₽\s*$/.test(el.innerText)
-                    && !el.closest('del, s') && !style.textDecorationLine.includes('line-through');
-            });
-            // Do not guess if the price block has no identifiable current price.
-            if (!current) continue;
-            result.push({name, price_raw: current.innerText.trim(), price_text: priceText, url: link.href});
-        }
-    }
-    return result;
-}""".replace("__LISTING_ROOTS__", LISTING_ROOTS_JS)
+# Historical CLI utility functions below are retained for existing callers.
+# Product collection is implemented by parsers.ozon.ParserOzon.
 
 
 def listing_diagnostics(page):
@@ -90,8 +38,6 @@ def validate_url(value):
     parsed = urlsplit(value)
     if parsed.scheme != "https" or parsed.hostname not in {"ozon.ru", "www.ozon.ru"} or parsed.username or parsed.password:
         raise argparse.ArgumentTypeError("Нужна HTTPS-ссылка на ozon.ru или www.ozon.ru")
-    if parsed.path.startswith("/product/"):
-        raise argparse.ArgumentTypeError("Передайте выдачу поиска или категорию, а не отдельный товар")
     return value
 
 
@@ -187,70 +133,13 @@ def prepare_profile(args):
 
 
 def scrape(args):
-    try:
-        from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
-    except ImportError as exc:
-        raise RuntimeError("Установите Playwright: python -m pip install playwright") from exc
-    products = {}
-    with sync_playwright() as p:
-        launch_options = {"headless": not args.headed}
-        if args.channel:
-            launch_options["channel"] = args.channel
-        if args.direct:
-            launch_options["args"] = ["--no-proxy-server"]
-        context_options = {"locale": "ru-RU", "viewport": {"width": 1440, "height": 1000}}
-        browser = None
-        if args.profile:
-            context = p.chromium.launch_persistent_context(
-                str(args.profile.resolve()), **launch_options, **context_options)
-        else:
-            browser = p.chromium.launch(**launch_options)
-            context = browser.new_context(**context_options)
-        page = context.new_page()
-        page.set_default_timeout(args.timeout * 1000)
-        try:
-            for number in range(args.start_page, args.start_page + args.pages):
-                open_listing(page, args.url, number, args.manual)
-                check_access_page(page)
-                try:
-                    page.wait_for_function(WAIT_FOR_CARDS)
-                except PlaywrightTimeout as exc:
-                    info = listing_diagnostics(page)
-                    raise RuntimeError("Не найдена выдача товаров. Откройте поиск/категорию с товарами перед Enter. "
-                                       "Диагностика: " + json.dumps(info, ensure_ascii=False)) from exc
-                before = len(products)
-                stable = 0
-                previous_keys = set()
-                for _ in range(args.scrolls):
-                    raw_cards = page.evaluate(EXTRACT_CARDS)
-                    keys = set()
-                    for card in raw_cards:
-                        key, product = normalize_card(card)
-                        keys.add(key)
-                        # Keep the first displayed price for repeated products.
-                        products.setdefault(key, product)
-                    stable = stable + 1 if keys == previous_keys else 0
-                    previous_keys = keys
-                    if args.limit and len(products) >= args.limit:
-                        break
-                    if stable >= 3:
-                        break
-                    page.evaluate("window.scrollBy(0, Math.max(window.innerHeight * 0.8, 600))")
-                    page.wait_for_timeout(args.delay * 1000)
-                if not previous_keys:
-                    raise RuntimeError("Ссылки товаров есть, но названия/цены не распознаны. Диагностика: "
-                                       + json.dumps(listing_diagnostics(page), ensure_ascii=False))
-                print("Страница %s: новых товаров %s" % (number, len(products) - before), file=sys.stderr)
-                if args.limit and len(products) >= args.limit:
-                    break
-                if number < args.start_page + args.pages - 1:
-                    page.wait_for_timeout(args.delay * 1000)
-        finally:
-            context.close()
-            if browser is not None:
-                browser.close()
-    result = list(products.values())
-    return result[:args.limit] if args.limit else result
+    """Ozon now uses the same card pipeline and output contract as WB."""
+    from parsers.ozon import ParserOzon
+    parser = ParserOzon(args.url, headed=args.headed, manual=args.manual,
+                        channel=args.channel, profile=args.profile, direct=args.direct,
+                        timeout=args.timeout, scrolls=args.scrolls, delay=args.delay,
+                        limit=args.limit, pages=args.pages, start_page=args.start_page)
+    return parser.get_data()
 
 
 def main():
@@ -258,7 +147,7 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
     parser = argparse.ArgumentParser(description="Названия и видимые цены товаров Ozon в JSON")
-    parser.add_argument("url", type=validate_url, help="Ссылка на поиск или категорию Ozon")
+    parser.add_argument("url", type=validate_url, help="Ссылка на карточку, поиск или категорию Ozon")
     parser.add_argument("--output", type=Path, default=Path("products.json"))
     parser.add_argument("--pages", type=positive_int, default=1)
     parser.add_argument("--start-page", type=positive_int, default=1)
@@ -285,7 +174,8 @@ def main():
             raise RuntimeError("Товары не найдены; JSON не записан")
         args.output.parent.mkdir(parents=True, exist_ok=True)
         temporary = args.output.with_name(args.output.name + ".tmp")
-        temporary.write_text(json.dumps(products, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        from contracts import dumps
+        temporary.write_text(dumps(products) + "\n", encoding="utf-8")
         temporary.replace(args.output)
     except (RuntimeError, ValueError, OSError) as exc:
         print("Ошибка: " + str(exc), file=sys.stderr)

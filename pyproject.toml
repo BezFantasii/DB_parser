@@ -7,10 +7,13 @@ name = "ozon-parser"
 version = "0.1.0"
 description = "Collect Ozon product names and displayed prices into JSON"
 requires-python = ">=3.9"
-dependencies = ["playwright>=1.40,<2"]
+dependencies = ["playwright>=1.40,<2", "beautifulsoup4>=4.12,<5", "psycopg2-binary>=2.9,<3"]
 
 [project.scripts]
 ozon-parser = "ozon_parser:main"
+marketplace-parser = "main:main"
+marketplace-server = "server:main"
 
 [tool.setuptools]
-py-modules = ["ozon_parser"]
+py-modules = ["ozon_parser", "wildberries_parser", "main", "server", "contracts", "ingest_client", "db", "models_simple", "features", "import_ozon"]
+packages = ["parsers"]
