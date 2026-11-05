@@ -1,4 +1,4 @@
-import setuptools  # 🔥 ОБЯЗАТЕЛЬНО: Фиксит ошибку distutils в Python 3.12+ для undetected-chromedriver
+import setuptools  # 🔥 Фикс distutils на Python 3.12+
 import time
 import random
 from abc import ABC, abstractmethod
@@ -15,7 +15,6 @@ from selenium.common.exceptions import TimeoutException, WebDriverException, NoS
 from bs4 import BeautifulSoup
 
 from contracts import HOSTS, dumps, normalize_item, product_url
-# from features import extract_all  # Раскомментируйте, если используете
 
 
 class Parser(ABC):
@@ -46,11 +45,8 @@ class Parser(ABC):
         ...
 
     def _create_browser(self):
-        """Создание браузера с максимальной маскировкой от Ozon и WB"""
         options = uc.ChromeOptions()
         
-        # Ozon (DataDome) и WB (Cloudflare) очень не любят Headless-режим.
-        # Если ловите 403/498, лучше запускать с видимым окном (headed=True).
         if not self.headed:
             options.add_argument("--headless=new")
             
@@ -58,29 +54,20 @@ class Parser(ABC):
         options.add_argument("--lang=ru-RU")
         options.add_argument("--disable-blink-features=AutomationControlled")
         
-        # Если включен direct, жестко отключаем любые прокси
         if self.direct:
             options.add_argument("--no-proxy-server")
             options.add_argument("--proxy-server='direct://'")
             options.add_argument("--proxy-bypass-list=*")
 
-        # Стратегия eager: не ждем картинки, чтобы не висло
         options.page_load_strategy = 'eager'
 
-        if self.channel:
-            options.add_argument(f"--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
-        # Настройка профиля (для сохранения куки и обхода капчи)
         if self.profile:
             profile_path = str(Path(self.profile).resolve())
             options.add_argument(f"--user-data-dir={profile_path}")
 
-        print("🛡️ Запуск undetected-chromedriver (обход защиты)...")
-        
-        # Если используем профиль, undetected_chromedriver требует передачи его в аргументах
+        print("🛡️ Запуск undetected-chromedriver...")
         driver = uc.Chrome(options=options)
         
-        # 🔥 SELENIUM STEALTH: Маскируем оставшиеся следы
         stealth(driver,
                 languages=["ru-RU", "ru"],
                 vendor="Google Inc.",
@@ -92,11 +79,9 @@ class Parser(ABC):
         
         driver.set_page_load_timeout(self.timeout)
         driver.set_script_timeout(self.timeout)
-        
         return driver
 
     def _load(self, driver, url):
-        """Загрузка страницы с защитой от зависаний и блокировок"""
         parts = urlsplit(url)
         if parts.hostname not in HOSTS[self.site]:
             raise ValueError("Переход вне выбранной площадки")
@@ -104,12 +89,11 @@ class Parser(ABC):
         try:
             driver.get(url)
         except TimeoutException:
-            print(f"⚠️ Таймаут загрузки {url}. Пробуем работать с тем, что загрузилось...")
+            print(f"⚠️ Таймаут загрузки {url}.")
         except WebDriverException as e:
             raise RuntimeError(f"Сетевая ошибка: {e.msg}")
 
-        # Случайная задержка (имитация человека)
-        time.sleep(random.uniform(self.delay, self.delay + 2))
+        time.sleep(random.uniform(self.delay, self.delay + 1.5))
 
         if self.manual:
             input("Дождитесь загрузки страницы и нажмите Enter: ")
@@ -119,15 +103,14 @@ class Parser(ABC):
             
         try:
             text = driver.find_element(By.TAG_NAME, "body").text
-            if "Похоже, нет соединения" in text and "Обратиться в поддержку" in text:
-                raise RuntimeError("Ozon: страница отказа в доступе (403)")
+            if "Похоже, нет соединения" in text:
+                raise RuntimeError("Отказ в доступе (403)")
             if "Доступ ограничен" in text or "captcha" in driver.current_url.lower():
                 raise RuntimeError("Сработала капча или блокировка (498)")
         except NoSuchElementException:
             pass
 
     def _parse_card(self, driver, url):
-        """Парсинг карточки товара"""
         self._load(driver, url)
         
         try:
@@ -137,9 +120,7 @@ class Parser(ABC):
         except TimeoutException:
             print(f"⚠️ Заголовок на странице {url} не появился.")
 
-        # read_specs теперь принимает driver
         specs = self.read_specs(driver) 
-        
         item = self._parse_data(driver.page_source, url)
         
         if specs:
@@ -150,9 +131,7 @@ class Parser(ABC):
         return normalize_item(item, self.site)
 
     def get_data(self):
-        """Основной метод сбора данных"""
         driver = self._create_browser()
-        
         try:
             driver.implicitly_wait(2) 
             
@@ -185,10 +164,9 @@ class Parser(ABC):
                         break
                         
                     if step < self.scrolls:
-                        # Имитация человеческого скролла
                         scroll_y = random.randint(800, 1500)
                         driver.execute_script(f"window.scrollBy(0, {scroll_y});")
-                        time.sleep(random.uniform(1.0, 2.5))
+                        time.sleep(random.uniform(1.0, 2.0))
                         
                 if self.limit and len(links) >= self.limit:
                     break

@@ -6,6 +6,13 @@ import os
 import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from pathlib import Path
+env_file = Path(__file__).parent / ".env"
+# if env_file.exists():
+#     for line in env_file.read_text(encoding='utf-8').splitlines():
+#         line = line.strip()
+#         if line and not line.startswith("#") and "="
+
 import db
 from contracts import dumps, loads, validate_batch
 
@@ -88,6 +95,7 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
+    connection_string = os.environ.get("DATABASE_URL")
     if not os.environ.get("DATABASE_URL"):
         parser.error("Задайте DATABASE_URL")
     with create_server(args.host, args.port) as server:
