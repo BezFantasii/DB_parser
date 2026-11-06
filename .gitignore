@@ -1,13 +1,87 @@
+# Python environments, bytecode, packaging and tool caches.
 .venv/
+.venv-*/
+venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.egg-info/
+.eggs/
 build/
 dist/
-products.json
-products.json.tmp
-.ozon-profile/
-tmp/pdfs/
-tmp/db-tests/
-.wb-profile/
-# Убрать тз из отслеживаемых файлов после утверждения и поместить в .gitignore
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node dependencies and generated build/test output.
+node_modules/
+.npm/
+.eslintcache
+*.tsbuildinfo
+coverage/
+
+# Local credentials. Commit templates, not configured copies.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.secrets/
+
+# Logs, editor temporary files and local database/backup files.
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.dump
+*.sql.gz
+
+# Collected data and persistent browser sessions in the project root.
+/products*.json
+/.ozon-profile/
+/.wb-profile/
+/exports/
+/output/
+
+# Scratch output. Preserve the existing PDF generator as source code.
+/tmp/*
+!/tmp/pdfs/
+/tmp/pdfs/*
+!/tmp/pdfs/*.py
+
+# Deliberately versioned database fixtures override the backup rules.
+!**/tests/fixtures/*.sqlite
+!**/tests/fixtures/*.sqlite3
+!**/tests/fixtures/*.db
+
+# OS and IDE-local state. Shared VS Code configuration may be committed.
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+
+# Existing tracked reference PDFs and SQL dumps remain tracked intentionally.
+# .gitignore does not remove already tracked files from the index/history.

@@ -46,7 +46,7 @@ def parse_product(source, url, marketplace):
     if soup.select_one('[data-widget="searchResults"], [data-widget="searchResultsV2"]') and not soup.select_one("h1"):
         raise ValueError("Получена выдача вместо карточки")
     text = soup.get_text("\n", strip=True)
-    if "Похоже, нет соединения" in text and "Обратиться в поддержку" in text:
+    if "Похоже, нет соединения" in " ".join(text.split()) and "Обратиться в поддержку" in " ".join(text.split()):
         raise ValueError("Получена страница отказа в доступе")
     candidates = []
     for script in soup.select('script[type="application/ld+json"]'):

@@ -1,0 +1,63 @@
+name: marketplace-parser
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: marketplace
+      POSTGRES_USER: parser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parser-local-development}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U parser -d marketplace"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  api:
+    image: marketplace-parser-api:local
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment: &common
+      DATABASE_URL: postgresql://parser:${POSTGRES_PASSWORD:-parser-local-development}@db:5432/marketplace
+      API_TOKEN: ${API_TOKEN:-local-development-token}
+      API_HOST: 0.0.0.0
+      ALLOW_FIXTURE_JOBS: ${ALLOW_FIXTURE_JOBS:-0}
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  worker:
+    image: marketplace-parser-api:local
+    pull_policy: never
+    command: [xvfb-run, -a, --server-args=-screen 0 1440x1000x24, python, -m, backend.worker]
+    environment: *common
+    volumes:
+      - parser-data:/data
+    shm_size: 1gb
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  test-api:
+    profiles: [test]
+    image: marketplace-parser-api:local
+    pull_policy: never
+    command: [python, -m, backend.tests.serve]
+    environment: *common
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres-data:
+  parser-data:

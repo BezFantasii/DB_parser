@@ -1,0 +1,9 @@
+# Browser sessions and disposable automation profiles.
+/.browser-profile/
+/.live-profile/
+/.test-profile-*/
+
+# Reproducible test artifacts, screenshots, traces and reports.
+/test-results/
+/playwright-report/
+/blob-report/

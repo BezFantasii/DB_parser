@@ -3,18 +3,21 @@ import time
 from bs4 import BeautifulSoup
 from .base import Parser
 from features import extract_all
+from contracts import normalize_item
 
 
 class ParserWildberries(Parser):
     site = "wb"
 
-    def _parse_data(self, source, url):
+    def _parse_data(self, source, url=None):
+        url = url or self.link
         soup = BeautifulSoup(source, "html.parser")
         
         # 1. Название
         title_elem = soup.select_one("[class*='productTitle']")
         if not title_elem:
-            raise ValueError("Не найдено название товара")
+            from .html import parse_product
+            return parse_product(source, url, self.site)
         name = title_elem.get_text(strip=True)
 
         # 2. Текст всей страницы для поиска цен и рейтинга
@@ -24,7 +27,8 @@ class ParserWildberries(Parser):
         price_matches = re.findall(r"(\d[\d\s\xa0]*\d|\d)\s*₽", all_text)
         prices = [int(re.sub(r"\D", "", x)) for x in price_matches[:3]]
         if len(prices) < 3:
-            raise ValueError("найдено цен: %s, нужно 3" % len(prices))
+            from .html import parse_product
+            return parse_product(source, url, self.site)
 
         # 4. Бренд, отзывы, рейтинг
         brand = re.findall(r"^(\S+)\s*/", all_text, re.MULTILINE)
@@ -35,7 +39,7 @@ class ParserWildberries(Parser):
         m = re.search(r"/catalog/(\d+)/detail", url)
         nm_id = m.group(1) if m else "unknown"
 
-        return {
+        return normalize_item({
             "external_id": nm_id,
             "name": name,
             "url": url,
@@ -44,7 +48,7 @@ class ParserWildberries(Parser):
             "old_price": prices[2],
             "rating": float(rating[0].replace(",", ".")) if rating else None,
             "reviews_count": int(re.sub(r"\D", "", feedbacks[0])) if feedbacks else None,
-        }
+        }, self.site)
 
     def read_specs(self, driver):
         """Открывает окно 'Характеристики и описание' и возвращает его текст."""

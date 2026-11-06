@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Маркетплейсы — процесс сбора",
+  "description": "Товары Ozon и Wildberries, аналоги и история цен в локальной SQLite-базе.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "unlimitedStorage", "offscreen", "alarms", "scripting", "notifications"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://www.ozon.ru/*", "https://ozon.ru/*", "https://www.wildberries.ru/*", "https://wildberries.ru/*"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_title": "Открыть сбор товаров"},
+  "content_security_policy": {"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';"},
+  "cross_origin_embedder_policy": {"value": "require-corp"},
+  "cross_origin_opener_policy": {"value": "same-origin"}
+}

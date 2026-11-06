@@ -1,0 +1,4 @@
+# Runtime profiles, local logs/data and live-test artifacts.
+# Shared Python/environment/secret rules live in the root .gitignore.
+/data/
+/test-results/

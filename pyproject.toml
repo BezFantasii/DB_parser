@@ -7,7 +7,7 @@ name = "ozon-parser"
 version = "0.1.0"
 description = "Collect Ozon product names and displayed prices into JSON"
 requires-python = ">=3.9"
-dependencies = ["playwright>=1.40,<2", "beautifulsoup4>=4.12,<5", "psycopg2-binary>=2.9,<3"]
+dependencies = ["playwright>=1.40,<2", "beautifulsoup4>=4.12,<5", "psycopg2-binary>=2.9,<3", "selenium>=4,<5", "selenium-stealth>=1.0.6,<2", "undetected-chromedriver>=3.5,<4", "setuptools>=70,<82"]
 
 [project.scripts]
 ozon-parser = "ozon_parser:main"

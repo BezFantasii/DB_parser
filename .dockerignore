@@ -1,0 +1,16 @@
+**
+!requirements.txt
+!contracts.py
+!features.py
+!parsers/
+!parsers/**
+!backend/
+!backend/**
+!tests/
+!tests/fixtures/
+!tests/fixtures/**
+**/__pycache__/**
+backend/.env
+backend/data/**
+backend/test-results/**
+backend/.venv/**
