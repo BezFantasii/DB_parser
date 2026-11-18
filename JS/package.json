@@ -6,7 +6,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/domain.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:widget": "npm run build && node scripts/widget-test.mjs",
+    "check:widget:live": "npm run build && node scripts/widget-live.mjs",
+    "check:backend:live": "npm run build && node scripts/backend-live.mjs",
     "test:browser": "npm run build && node scripts/browser-test.mjs",
     "test:client": "npm run build && node scripts/client-test.mjs",
     "start": "npm run build && node scripts/launch.mjs",

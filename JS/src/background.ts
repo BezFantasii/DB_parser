@@ -1,3 +1,4 @@
+import {setLegacyTabCheck} from './comparison-background.ts';
 import {marketplaceFor, productUrl, sourceUrl} from "./domain.ts";
 let creating: Promise<void> | null = null;
 async function ensureDatabase(): Promise<void> {
@@ -31,6 +32,10 @@ async function dispatch(task: any): Promise<void> {
   }
 }
 let pumping: Promise<void> | null = null;
+async function legacyIsOpen():Promise<boolean>{
+  return !!(await chrome.runtime.getContexts({contextTypes:[chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]})).length;
+}
+setLegacyTabCheck(async tabId=>await legacyIsOpen() && (await db('tasksForTab',{tabId})).length>0);
 let sessionReady: Promise<void> | null = null;
 function ensureSession(): Promise<void> {
   if(!sessionReady) sessionReady=(async()=>{
@@ -42,6 +47,8 @@ function ensureSession(): Promise<void> {
 function kick(delay=3500): void { setTimeout(()=>void pump().catch(console.error),delay); }
 async function pump(): Promise<void> {
   if (pumping) return pumping;
+  // The lightweight widget does not start SQLite or the legacy collection queue.
+  if(!await legacyIsOpen())return;
   pumping = (async()=>{
     await ensureSession();
     await db("schedule");
@@ -72,13 +79,6 @@ async function pump(): Promise<void> {
   })().finally(()=>{pumping=null;});
   return pumping;
 }
-async function openApp(): Promise<void> {
-  const url = chrome.runtime.getURL("index.html");
-  const existing = (await chrome.tabs.query({})).find(tab=>tab.url?.split("#")[0]===url);
-  if (existing?.id) { await chrome.tabs.update(existing.id,{active:true}); if (existing.windowId) await chrome.windows.update(existing.windowId,{focused:true}); }
-  else await chrome.tabs.create({url});
-}
-chrome.action.onClicked.addListener(()=>void openApp());
 chrome.runtime.onInstalled.addListener(()=>{
   void chrome.alarms.create("queue",{periodInMinutes:1});
 });
@@ -90,10 +90,12 @@ chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==="queue") void pump().c
 chrome.tabs.onUpdated.addListener((tabId,change,tab)=>{
   if(change.status!=="complete") return;
   try{marketplaceFor(tab.url||"");}catch{return;}
-  void db("tasksForTab",{tabId}).then(async(tasks)=>{for(const task of tasks) await dispatch(task);}).catch(console.error);
+  void legacyIsOpen().then(async open=>{if(!open)return;const tasks=await db("tasksForTab",{tabId});for(const task of tasks)await dispatch(task);}).catch(console.error);
 });
 chrome.tabs.onRemoved.addListener(tabId=>{
-  void db("tasksForTab",{tabId}).then(async tasks=>{
+  void legacyIsOpen().then(async open=>{
+    if(!open)return;
+    const tasks=await db("tasksForTab",{tabId});
     for(const t of tasks) await db("result",{taskId:t.id,token:t.token,error:"Рабочая вкладка закрыта",trusted:true});
     if(tasks.length) {await broadcast();kick();}
   }).catch(console.error);

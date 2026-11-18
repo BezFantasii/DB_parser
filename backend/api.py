@@ -45,6 +45,7 @@ class JobRequest(BaseModel):
     timeout: int = Field(default=45,ge=5,le=90)
     headed: bool = True
     mode: Literal["live","fixture"] = "live"
+    engine: Literal["selenium","chrome-session"] = "selenium"
 
     def url(self):
         if self.source.lower().startswith(("http:","https:")):
@@ -61,6 +62,8 @@ class JobRequest(BaseModel):
     @model_validator(mode="after")
     def validate_source(self):
         self.url()
+        if self.engine == "chrome-session" and self.marketplace != "ozon":
+            raise ValueError("Chrome-session engine поддерживается для Ozon")
         return self
 
 
@@ -126,7 +129,7 @@ def create_app(store=None, token=None, allow_fixtures=None):
 
     @app.get("/api/v1/marketplaces",dependencies=[Depends(auth)],tags=["parsers"])
     def marketplaces():
-        return {"items":[{"code":"ozon","engine":"selenium / undetected-chromedriver"},{"code":"wb","engine":"selenium / undetected-chromedriver","price_algorithm":"second and third displayed RUB amounts; structured fallback"}],"fixture_jobs":fixtures}
+        return {"items":[{"code":"ozon","engine":"selenium / undetected-chromedriver","engines":["selenium","chrome-session"]},{"code":"wb","engine":"selenium / undetected-chromedriver","price_algorithm":"second and third displayed RUB amounts; structured fallback"}],"fixture_jobs":fixtures}
 
     @app.post("/api/v1/jobs",status_code=202,dependencies=[Depends(auth)],tags=["jobs"])
     def create_job(body: JobRequest):

@@ -36,7 +36,7 @@ def execute(store,job,worker_id):
     messages=queue.Queue();items=None;error=None
     kwargs={"start_new_session":True} if os.name!="nt" else {"creationflags":subprocess.CREATE_NO_WINDOW|subprocess.CREATE_NEW_PROCESS_GROUP}
     with (log_root/f"{job_id}-{attempt}.log").open("w",encoding="utf-8") as stderr:
-        process=subprocess.Popen([sys.executable,"-u","-m","backend.collect"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=stderr,text=True,encoding="utf-8",**kwargs)
+        process=subprocess.Popen([sys.executable,"-u","-m","backend.collect"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=stderr,text=True,encoding="utf-8",env={**os.environ,"PYTHONIOENCODING":"utf-8","PYTHONUTF8":"1"},**kwargs)
         process.stdin.write(json.dumps(payload,default=str)+"\n");process.stdin.close()
         def read():
             for line in process.stdout:

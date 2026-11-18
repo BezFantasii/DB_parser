@@ -6,10 +6,10 @@ import socket
 
 
 @contextmanager
-def managed_profile(site):
-    if site not in ("ozon","wb"):
+def managed_profile(site, *, root=None):
+    if site not in ("ozon","wb","ozon-session","ozon-chrome-session"):
         raise ValueError("Unknown marketplace")
-    root=Path(os.environ.get("PROFILE_ROOT","backend/data/profiles")).resolve()
+    root=Path(root or os.environ.get("PROFILE_ROOT","backend/data/profiles")).resolve()
     profile=(root/site).resolve()
     if profile.parent!=root:
         raise ValueError("Profile must remain within PROFILE_ROOT")
@@ -19,6 +19,13 @@ def managed_profile(site):
             import fcntl
             # Another managed browser must release ownership before we inspect Chrome locks.
             fcntl.flock(ownership.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+        else:
+            import msvcrt
+            ownership.seek(0,2)
+            if not ownership.tell():
+                ownership.write(b"\0");ownership.flush()
+            ownership.seek(0)
+            msvcrt.locking(ownership.fileno(),msvcrt.LK_NBLCK,1)
         try:
             lock=profile/"SingletonLock"
             if os.name!="nt" and lock.is_symlink():
@@ -42,3 +49,6 @@ def managed_profile(site):
         finally:
             if os.name!="nt":
                 fcntl.flock(ownership.fileno(),fcntl.LOCK_UN)
+            else:
+                ownership.seek(0)
+                msvcrt.locking(ownership.fileno(),msvcrt.LK_UNLCK,1)

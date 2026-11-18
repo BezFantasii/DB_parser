@@ -1,5 +1,7 @@
 # Backend API и два режима расширения
 
+**Новое в 0.3.0:** компактный виджет расширения может получать данные через этот backend. Выбор находится в popup → «Источник данных» → «Через backend». Для Ozon добавлен движок обычной Chrome-сессии, результаты сохраняются в PostgreSQL и приходят в тот же виджет. Полная инструкция нативного Windows-запуска и Docker: [EXTENSION.md](EXTENSION.md).
+
 Используются текущие `parsers/ozon.py`, `parsers/wildberries.py` и Selenium/undetected-chromedriver из `parsers/base.py`. HTTP API и браузерный worker работают раздельно.
 
 Для отдельной проверки Ozon без Selenium добавлен [Python-парсер через обычный Google Chrome/CDP](OZON.md): `python -m backend.ozon_session "наушники" --limit 1`. Живой сбор подтверждён на установленном Chrome в Windows; Docker Chromium пока остаётся на CAPTCHA.
@@ -35,7 +37,9 @@ npm.cmd ci
 npm.cmd start
 ```
 
-Главный экран: выбор режима → запрос/URL → задания → журнал этапов → полученные данные. Для backend укажите `http://127.0.0.1:8000` и token. Пустой token означает локальный token по умолчанию. Credentials передаются заголовком Authorization, не в URL.
+Главный интерфейс теперь — компактный popup и виджет на странице поиска. Для backend выберите источник в popup, укажите `http://127.0.0.1:8000` и token. Пустой token означает локальный token по умолчанию. Credentials передаются заголовком Authorization, не в URL.
+
+Прежний экран массового сбора с журналом и таблицей сохранён по адресу `chrome-extension://<ID>/index.html`. Его настройки независимы от нового popup.
 
 Локальный режим выполняет JS-парсеры в рабочих вкладках и сохраняет данные в SQLite OPFS. Хранилища двух режимов независимы. Предыдущий расширенный локальный интерфейс сохранён как `advanced.html`, ссылка есть внизу страницы.
 

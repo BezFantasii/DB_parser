@@ -25,6 +25,9 @@ def run(payload):
             item=normalize_item(factory(url)._parse_data(fixture.read_text(encoding="utf-8"),url),site)
             emit("product.parsed",{"external_id":item["external_id"],"name":item["name"]})
             items=[item]
+        elif site=="ozon" and options.get("engine")=="chrome-session":
+            from backend.ozon_search import collect
+            items=collect(payload["source_url"],options,emit)
         else:
             from backend.profiles import managed_profile
             with managed_profile(site) as profile:

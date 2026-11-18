@@ -1,0 +1,6 @@
+# Add only when running API + Chrome worker natively on this Windows machine.
+# PostgreSQL remains in Docker and is exposed only on loopback.
+services:
+  db:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"

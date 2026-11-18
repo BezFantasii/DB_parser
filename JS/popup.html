@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Сравнить цены</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <header><span class="dot"></span><strong>Сравнить цены</strong><label title="Автоматический поиск на второй площадке"><input id="enabled" type="checkbox" aria-label="Автопоиск"><span>Авто</span></label></header>
+  <details id="settings"><summary>Источник данных</summary>
+    <label class="setting">Получать товары<select id="mode"><option value="browser">В браузере</option><option value="backend">Через backend</option></select></label>
+    <div id="backend-fields" hidden>
+      <label class="setting">Адрес API<input id="backend-url" type="url" placeholder="http://127.0.0.1:8000"></label>
+      <label class="setting">API token<input id="backend-token" type="password" autocomplete="off" placeholder="Локальный token по умолчанию"></label>
+      <button id="backend-check" type="button">Проверить сервер</button>
+    </div>
+    <button id="settings-save" type="button">Сохранить</button><p id="settings-status" role="status"></p>
+  </details>
+  <main id="results" class="body"><p>Загрузка…</p></main>
+  <footer>Ozon ↔ Wildberries <button id="browser-diagnostics" type="button">Скачать диагностику браузера</button></footer>
+  <script type="module" src="popup.js"></script>
+</body></html>
