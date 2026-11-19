@@ -51,6 +51,50 @@ class ProductContractTests(unittest.TestCase):
         self.assertEqual(item["price"], 1299)
         self.assertEqual(item["old_price"], 2000)
 
+    def test_wildberries_uses_semantic_current_price_not_page_price_order(self):
+        fixture = Path(__file__).parent / "fixtures" / "wb_current.html"
+        item = ParserWildberries(WB)._parse_data(fixture.read_text(encoding="utf-8"))
+        self.assertEqual(item["price"], 1299)
+        self.assertEqual(item["old_price"], 2000)
+        self.assertNotEqual(item["price"], 999)  # wallet price is a separate offer
+        self.assertEqual(item["brand"], "Example")
+        self.assertEqual(item["rating"], Decimal("4.8"))
+        self.assertEqual(item["reviews_count"], 1234)
+
+    def test_wildberries_current_live_dom_uses_regular_price_and_real_product_name(self):
+        fixture = Path(__file__).parent / "fixtures" / "wb_live_dom.html"
+        item = ParserWildberries("https://www.wildberries.ru/catalog/1256886607/detail.aspx")._parse_data(
+            fixture.read_text(encoding="utf-8")
+        )
+        self.assertEqual(item["name"], "Наушники беспроводные A.Pods Pro 2 для iPhone и Android")
+        self.assertEqual(item["price"], Decimal("618"))
+        self.assertEqual(item["old_price"], Decimal("1999"))
+        self.assertEqual(item["rating"], Decimal("5"))
+        self.assertEqual(item["reviews_count"], 23427)
+        # 599 ₽ is the wallet/button offer; 396/489/544 ₽ are recommendations.
+        self.assertNotIn(item["price"], (Decimal("599"), Decimal("396"), Decimal("489"), Decimal("544")))
+
+    def test_wildberries_never_uses_recommendation_price_as_product_price(self):
+        html = '<h1 class="productTitle">Наушники</h1><aside>Рекомендуем: 99 ₽</aside>'
+        with self.assertRaisesRegex(ValueError, "цена"):
+            ParserWildberries(WB)._parse_data(html)
+
+    def test_abbreviated_review_count_is_not_misread_as_integer(self):
+        html = '<h1 class="productTitle">Наушники</h1>' \
+               '<span class="price-block__final-price">1 299 ₽</span>' \
+               '<span class="product-review__count">1,2 тыс. оценок</span>'
+        item = ParserWildberries(WB)._parse_data(html)
+        self.assertIsNone(item["reviews_count"])
+
+    def test_wildberries_uses_matching_product_jsonld_when_dom_price_missing(self):
+        html = '<h1 class="productTitle">Наушники</h1>' \
+               '<script type="application/ld+json">' \
+               '{"@type":"Product","url":"https://www.wildberries.ru/catalog/456/detail.aspx",' \
+               '"name":"Наушники","offers":{"@type":"Offer","price":"1299.50","priceCurrency":"RUB"}}' \
+               '</script><aside>Рекомендация: 99 ₽</aside>'
+        item = ParserWildberries(WB)._parse_data(html)
+        self.assertEqual(item["price"], Decimal("1299.50"))
+
     def test_multi_digit_count_and_decimal_roundtrip(self):
         payload = loads(dumps(batch()))
         item = validate_batch(payload)[2][0]
